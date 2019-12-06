@@ -1,0 +1,131 @@
+#!/bin/sh
+# gerrit-project-name = !git config --get remote.origin.url | sed -e 's_.*:29418/__' -e 's_\\.git__'
+# gerrit-json-query = !ssh -x -p 29418 gittools.se.axis.com gerrit query --format=JSON project:$(git gerrit-project-name) $*
+# # gerrit-change-refs = "!f() { git gerrit-json-query $* | head -n-1 | jq -r '\"refs/changes/\\(.number[-2:])/\\(.number)/latest\"'; }; f"
+# gerrit-change-refs = "!f() { git gerrit-json-query $* | head -n-1 | jq -r '.number | tostring | \"refs/changes/\\(.[-2:])/\\(.)/latest\"'; }; f"
+# gerrit-open-change-refs = !git gerrit-change-refs status:open
+# gerrit-change-fetches = "!f() { git gerrit-change-refs $* | sed \"s_refs/changes/[0-9][0-9]/\\([0-9]\\+/latest\\)_+\\0:refs/remotes/origin/changes/\\1_\"; }; f"
+# gerrit-open-change-fetches = !git gerrit-change-fetches status:open
+# gerrit-add-refs = "!f() { git gerrit-change-fetches $* | xargs -r -L1 git config --add remote.origin.fetch; }; f"
+# gerrit-add-open-refs = !git gerrit-add-refs status:open
+# gerrit-add-my-open-refs = !git gerrit-add-refs status:open owner:self
+# gerrit-rm-refs = !git config --get-all remote.origin.fetch | sed -n \"/refs.changes/s/^+/git config --unset remote.origin.fetch /e\"
+# gerrit-update-open-refs = !git gerrit-rm-refs && git gerrit-add-refs status:open
+# gerrit-update-my-refs = !git gerrit-rm-refs && git gerrit-add-refs status:open owner:self
+
+usage() {
+	cat <<EOF
+git gerrit-refs [options] query [--format={TEXT|JSON}] <query>
+
+Options:
+    --project <project>  Use <project> instead of the project of the current repo.
+
+Query:
+    Query the gerrit server for changesets matching the query expression.
+    The query syntax is specified in the "Search" section of the gerrit documentation.
+
+    The --format option (defaults to TEXT) specifies how entries should be output.
+EOF
+}
+
+parse_git_url() {
+	local url proto user host port path
+	url=$2
+	# Remove any scheme or protocol
+	proto=${url%%://*}
+	url=${url#${proto}://}
+	# Remove any user
+	user=${url%%@*}
+	if [ "$user" = "$url" ]; then
+		user=""
+	else
+		url=${url#${user}@}
+	fi
+	# Remove the host
+	host=${url%%[:/]*}
+	url=${url#${host}}
+	# Remove the port
+	port=$(expr $url : ":\([0-9]\+\)[:/]")
+	url=${url#${port:+:${port}}}
+	# Remove the leading : or / from the path
+	path=${url#?}
+	case $1 in
+		scheme|prot*) echo $proto ;;
+		user)         echo $user  ;;
+		host)         echo $host  ;;
+		port)         echo $port  ;;
+		path)         echo $path  ;;
+		*)
+			echo "parse_git_url: Unknown part '$1'" >&2
+			exit 1
+			;;
+	esac
+}
+
+parse_gerrit_info() {
+	gitremote=$(git config --get remote.origin.url)
+	gerrithost=$(parse_git_url host ${gitremote})
+	gerritport=$(parse_git_url port ${gitremote})
+	project=$(parse_git_url path ${gitremote})
+	project=${project%%.git}
+}
+
+gerrit_query() {
+	parse_gerrit_info
+	while [ "$1" ]; do
+		case "$1" in
+			'--format'|'--format=*')
+			format=${1#*=}
+			if [ "$format" = "$1" ]; then
+				format=$2
+				shift
+			fi
+			shift
+			case $format in
+				TEXT|JSON);;
+				*)
+					echo "Unknown gerrit query output format '$format'"
+					return 1
+					;;
+			esac
+			;;
+			--) shift; break ;;
+			*)         break ;;
+		esac
+	done
+	ssh -x ${gerritport:+-p $gerritport} $gerrithost \
+		gerrit query --format=${format:-TEXT} "project:$project" $@
+}
+
+
+if [ $# -eq 0 ]; then
+	usage
+	exit
+fi
+while [ "$1" ] ; do
+	case "$1" in
+		'-h'|'--help')
+			usage
+			exit 0
+			;;
+		"-p"|"--project"|"-p=*"|"--project=*")
+			# TODO: Check the number of arguments
+			project=${1#*=}
+			if [ "$project" = "$1" ]; then
+				project=$2
+				shift
+			fi
+			shift
+			;;
+		'query')
+			shift
+			gerrit_query $@
+			exit $?
+			;;
+		*)
+			usage
+			exit 1
+			;;
+	esac
+done
+
