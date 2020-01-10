@@ -68,6 +68,7 @@ parse_gerrit_info() {
 	gerritport=$(parse_git_url port ${gitremote})
 	project=$(parse_git_url path ${gitremote})
 	project=${project%%.git}
+	gerritssh="ssh -x ${gerritport:+-p $gerritport} $gerrithost"
 }
 
 gerrit_query() {
@@ -93,7 +94,7 @@ gerrit_query() {
 			*)         break ;;
 		esac
 	done
-	ssh -x ${gerritport:+-p $gerritport} $gerrithost \
+	$gerritssh \
 		gerrit query --format=${format:-TEXT} "project:$project" $@
 }
 
