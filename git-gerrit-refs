@@ -16,6 +16,7 @@
 usage() {
 	cat <<EOF
 git gerrit-refs [options] query [--format={TEXT|JSON}] <query>
+git gerrit-refs [options] addref <query>
 
 Options:
     --project <project>  Use <project> instead of the project of the current repo.
@@ -25,6 +26,13 @@ Query:
     The query syntax is specified in the "Search" section of the gerrit documentation.
 
     The --format option (defaults to TEXT) specifies how entries should be output.
+
+Addref:
+    Add references for the gerrit changesets matching the query expression.
+
+	options:
+      --prune  Remove existing refs
+      --trace  Print all git config operations
 EOF
 }
 
@@ -98,6 +106,73 @@ gerrit_query() {
 		gerrit query --format=${format:-TEXT} "project:$project" $@
 }
 
+ref_formatter() {
+	sed -E "s_([0-9]*([0-9]{2}))_+refs/changes/\2/\1/latest:refs/remotes/origin/changes/\1_"
+}
+
+gerrit_addref() {
+	parse_gerrit_info
+	local datadir prune='' trace=''
+	local name=remote.origin.fetch
+	# TODO: We probably want a regex here that matches the local refs
+	#       instead of the remote refs. Might be tricky if we want
+	#       dynamic local names
+	local refregex='refs/changes/[0-9]{2}/[0-9]+'
+	while [ "$1" ]; do
+		case $1 in
+			--prune|-p) prune=1;  shift ;;
+			--trace|-t) trace=-t; shift ;;
+			--) shift; break ;;
+			-*)
+				echo "Unknown option $1"
+				return 1
+				;;
+			*)         break ;;
+		esac
+	done
+	datadir=$(mktemp --directory --tmpdir  git-gerrit-query-addref.XXXXXX)
+	local oldrefs=$datadir/oldrefs
+	local newrefs=$datadir/newrefs
+	# Read all current refs into the oldrefs file
+	git config --get-all $name |
+		grep -E $refregex  > $oldrefs
+	# Read all found refs into the newrefs file
+	$gerritssh \
+		gerrit query --format=JSON "project:$project" $@ |
+		head -n-1 |
+		jq -r '.number' |
+		ref_formatter >$newrefs
+	if [ "$prune" ]; then
+		local duprefs=$datadir/duprefs
+		# Find duplicated oldrefs
+		sort $oldrefs | uniq -d >$duprefs
+		if [ -s $duprefs ]; then
+			local refrestore=$datadir/refbackup
+			# find all refs that are not in duprefs
+			git config --get-all $name |
+				grep -F -v -f $duprefs >$refrestore
+			# Use xargs to trace the git config command
+			echo | xargs $trace git config --unset-all $name
+			# Re-add the non-duplicated and one each of the duplicates
+			cat $refrestore $duprefs |
+				xargs $trace --max-args=1 --no-run-if-empty \
+					  git config --add $name
+		fi
+		# Remove all old refs that would not be added by the query.
+		grep -F -v -f $newrefs $oldrefs |
+			sed 's/+/\\\\+/g' |
+			xargs $trace --max-args=1 --no-run-if-empty \
+				  git config --unset $name
+		# Update the oldrefs file.  Not really needed?
+		git config --get-all $name |
+			grep -E $refregex > $oldrefs
+	fi
+	# Add any refs from the query that is not already in oldrefs
+	grep -F -v -f $oldrefs $newrefs |
+		xargs $trace --max-args=1 --no-run-if-empty \
+			  git config --add $name
+}
+
 
 if [ $# -eq 0 ]; then
 	usage
@@ -118,6 +193,11 @@ while [ "$1" ] ; do
 			fi
 			shift
 			;;
+		'addref')
+			shift
+			gerrit_addref "$@"
+			exit $?
+			;;
 		'query')
 			shift
 			gerrit_query $@
@@ -129,4 +209,3 @@ while [ "$1" ] ; do
 			;;
 	esac
 done
-
