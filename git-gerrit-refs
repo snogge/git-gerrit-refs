@@ -18,6 +18,7 @@ usage() {
 git gerrit-refs [options] query [--format={TEXT|JSON}] <query>
 git gerrit-refs [options] addref <query>
 git gerrit-refs [options] rmrefs
+git gerrit-refs [options] rmdups
 
 Options:
     --project <project>  Use <project> instead of the project of the current repo.
@@ -37,6 +38,12 @@ Addref:
 
 Rmrefs:
     Remove all gerrit changeset refspecs
+
+	options:
+      --trace  Print all git config operations
+
+Rmdups:
+    Remove duplicate refspecs entries
 
 	options:
       --trace  Print all git config operations
@@ -110,7 +117,7 @@ gerrit_query() {
 		esac
 	done
 	$gerritssh \
-		gerrit query --format=${format:-TEXT} "project:$project" $@
+		gerrit query --format=${format:-TEXT} "project:$project" "$@"
 }
 
 ref_formatter() {
@@ -140,6 +147,38 @@ gerrit_rmrefs() {
 		sed 's/+/\\\\+/g' |
 		xargs $trace --max-args=1 --no-run-if-empty \
 			  git config --unset $name
+}
+
+gerrit_rm_duplicates() {
+	local trace=''
+	while [ "$1" ]; do
+		case $1 in
+			--trace|-t) trace=-t; shift ;;
+			--) shift; break ;;
+			-*)
+				echo "Unknown option $1"
+				return 1
+				;;
+			*)         break ;;
+		esac
+	done
+	local name datadir duplicates oldrefs
+	name=remote.origin.fetch
+	datadir="$(mktemp --directory --tmpdir  git-gerrit-query-rmdup.XXXXXX)"
+	duplicates="$datadir/duplicates"
+	oldrefs="$datadir/oldrefs"
+	git config --get-all $name |
+		grep -E "$refregex" |
+		tee "$oldrefs" |
+		sort |
+		uniq -d > "$duplicates"
+	# Use xargs to trace the git config command
+	echo | xargs $trace git config --unset-all $name
+	# Re-add the non-duplicated and one each of the duplicates
+	grep -Fvf "$duplicates" "$oldrefs" |
+		cat - "$duplicates" |
+		xargs $trace --max-args=1 --no-run-if-empty \
+			  git config --add $name
 }
 
 gerrit_addref() {
@@ -231,6 +270,7 @@ while [ "$1" ] ; do
 			;;
 		'addref') shift; gerrit_addref "$@";        exit $?;;
 		'query')  shift; gerrit_query "$@";         exit $?;;
+		'rmdups') shift; gerrit_rm_duplicates "$@"; exit $?;;
 		'rmrefs') shift; gerrit_rmrefs "$@";        exit $?;;
 		*)
 			usage
