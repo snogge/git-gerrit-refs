@@ -238,3 +238,7 @@ while [ "$1" ] ; do
 			;;
 	esac
 done
+
+# Local Variables:
+# tab-width: 4
+# End:
