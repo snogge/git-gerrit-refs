@@ -1,0 +1,113 @@
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+
+.TH GIT-GERRIT-REFS 1 2020-01-15 "git-gerrit-refs alpha" git\ gerrit-refs\ manual
+.SH NAME
+git-gerrit-refs \- Update gerrit refspecs
+.SH SYNOPSIS
+
+.nf
+\fBgit-gerrit-refs\fR [\fIOPTION ...\fR] \fBaddref\fR [\fB\-t\fR | \fB\-\-trace\fR] [\fB\-p\fR | \fB\-\-prune\fR]
+                                    [\fI<queryop> ...\fR]
+\fBgit-gerrit-refs\fR [\fIOPTION ...\fR] \fBrmrefs\fR [\fB\-t\fR | \fB\-\-trace\fR]
+\fBgit-gerrit-refs\fR [\fIOPTION ...\fR] \fBrmdups\fR [\fB\-t\fR | \fB\-\-trace\fR]
+\fBgit-gerrit-refs\fR [\fIOPTION ...\fR] \fBquery\fR [\fB\-\-format=<JSON|TEXT>\fR] [\fI<queryop> ...\fR]
+.fi
+
+.SH DESCRIPTION
+Queries gerrit for changesets and adds refspecs accordingly.
+.SH OPTIONS
+Mandatory arguments to long options are mandatory for short options too.
+.TP 4
+.BR \-h ", " \-\-help
+Display this help and exit.
+.TP 4
+.BR \-p ", " \-\-project = \fIPROJECT\fR
+Use PROJECT in the query instead of the current repo.
+.SH COMMANDS
+Several commands are available to manipulate the gerrit refpecs.
+.TP 4
+.B addref
+Adds refspecs to remote.origin.fetch (see \fBgit-fetch\fR(1)) for all
+gerrit reviews matching the \fBquery operators\fR.  The query
+operators are described in the \fBQUERIES\fR section.  For each
+matching review a refspec
+\+refs/changes/XX/YYYXX/latest:refs/remotes/origin/changes/YYYXX is
+added to remote.origin.fetch, unless that refspec is already in
+remote.origin.fetch.
+.RS 4
+.LP
+With \fB\-\-prune\fR option, removes all gerrit refspecs that are not
+returned by the query.
+This can be used to keep refspecs to open reviews up to date.
+.LP
+With \fB\-\-trace\fR option, print all git-config calls to stdout.
+.RE
+.TP 4
+.B rmrefs
+Removes all gerrit refspecs from remote.origin.fetch
+.RS 4
+.LP
+With \fB\-\-trace\fR option, print all git-config calls to stdout.
+.RE
+.TP 4
+.B rmdups
+Removes all - not only gerrit - duplicate refspecs from
+remote.origin.fetch.
+.RS 4
+.LP
+With \fB\-\-trace\fR option, print all git-config calls to stdout.
+.RE
+.TP 4
+.B query
+Search for gerrit changes matching the specified query operators.  The
+output is in the gerrit qeuery text format unless the \fB\-\-format\fR
+is used.
+.RS 4
+.LP
+Use \fB\-\-format\fR to specify the output format.
+.TP 2
+.B TEXT
+Output human readable text for each matched gerrit change.
+.TP 2
+.B JSON
+List gerrit changes as one JSON object per line.
+.RE
+.SH QUERIES
+Commands that use queries use the standard gerrit search string as described in
+.UR https://gerrit-documentation.storage.googleapis.com/Documentation/3.1.2/user-search.html
+'Gerrit Code Review - Searching Changes'
+.UE .
+All commands include the \fBproject:\fR operator set to the current
+project.
+Use the \fB\-\-project\fR option to set another project.
+.PP
+Commands that use queries use the standard gerrit search string as described in
+.URL https://gerrit-documentation.storage.googleapis.com/Documentation/3.1.2/user-search.html "'Gerrit Code Review - Searching Changes'" .
+All commands include the \fBproject:\fR operator set to the current
+project.
+Use the \fB\-\-project\fR option to set another project.
+.SH EXAMPLES
+.IP \(bu 4
+Add refspecs for all open reviews owned by the user.
+Each time the command is called any closed chenges are pruned.
+.sp
+.EX
+git gerrit-refs add --prune owner:self status:open
+.EE
+.IP \(bu 4
+List gerrit changes in the current project with hashtag #bug-123.
+.sp
+.EX
+git gerrit-refs query hashtag:bug-123
+.EE
+.SH SEE ALSO
+.BR git-config "(1) " git-fetch "(1) " gitglossary (7)
