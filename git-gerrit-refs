@@ -281,7 +281,7 @@ main() {
 	done
 }
 
-main $@
+[ "$GIT_GERRIT_REFS_TEST" ] || main "$@"
 
 # Local Variables:
 # tab-width: 4
