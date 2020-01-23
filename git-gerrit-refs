@@ -245,39 +245,43 @@ gerrit_addref() {
 }
 
 
-if [ $# -eq 0 ]; then
-	usage
-	exit
-fi
-while [ "$1" ] ; do
-	case "$1" in
-		'-h'|'--help')
-			usage
-			exit 0
-			;;
-		"-p"|"--project"|"-p=*"|"--project=*")
-			# TODO: Check the number of arguments
-			project=${1#*=}
-			if [ "$project" = "$1" ]; then
-				project=$2
+main() {
+	if [ $# -eq 0 ]; then
+		usage
+		exit
+	fi
+	while [ "$1" ] ; do
+		case "$1" in
+			'-h'|'--help')
+				usage
+				exit 0
+				;;
+			"-p"|"--project"|"-p=*"|"--project=*")
+				# TODO: Check the number of arguments
+				project=${1#*=}
+				if [ "$project" = "$1" ]; then
+					project=$2
+					shift
+				fi
 				shift
-			fi
-			shift
-			;;
-		"--debug")
-			set -x
-			shift
-			;;
-		'addref') shift; gerrit_addref "$@";        exit $?;;
-		'query')  shift; gerrit_query "$@";         exit $?;;
-		'rmdups') shift; gerrit_rm_duplicates "$@"; exit $?;;
-		'rmrefs') shift; gerrit_rmrefs "$@";        exit $?;;
-		*)
-			usage
-			exit 1
-			;;
-	esac
-done
+				;;
+			"--debug")
+				set -x
+				shift
+				;;
+			'addref') shift; gerrit_addref "$@";        exit $?;;
+			'query')  shift; gerrit_query "$@";         exit $?;;
+			'rmdups') shift; gerrit_rm_duplicates "$@"; exit $?;;
+			'rmrefs') shift; gerrit_rmrefs "$@";        exit $?;;
+			*)
+				usage
+				exit 1
+				;;
+		esac
+	done
+}
+
+main $@
 
 # Local Variables:
 # tab-width: 4
