@@ -47,6 +47,10 @@ Rmdups:
 
 	options:
       --trace  Print all git config operations
+
+coref:
+    Fetch and checkout a gerrit changeset
+
 EOF
 }
 
@@ -254,6 +258,22 @@ gerrit_cherry() {
 		git cherry-pick --stdin
 }
 
+gerrit_coref() {
+	set -x
+	local query datadir
+	query=$(printf '%s OR ' "$@")
+	query=${query% OR*}
+	datadir=$(mktemp --directory --tmpdir  git-gerrit-query-addref.XXXXXX)
+	local numbers=$datadir/numbers
+	gerrit_query --format=JSON --current-patch-set $query |
+		head -n-1 |
+		jq -r .number > $numbers
+	if read -r and read -r; then
+		echo Query matched more than one change:
+		cat $numbers
+	fi <$numbers
+}
+
 main() {
 	if [ $# -eq 0 ]; then
 		usage
@@ -279,6 +299,7 @@ main() {
 				shift
 				;;
 			'addref') shift; gerrit_addref "$@";        exit $?;;
+			'coref')  shift; gerrit_coref "$@";         exit $?;;
 			'cherry') shift; gerrit_cherry "$@";        exit $?;;
 			'query')  shift; gerrit_query "$@";         exit $?;;
 			'rmdups') shift; gerrit_rm_duplicates "$@"; exit $?;;
